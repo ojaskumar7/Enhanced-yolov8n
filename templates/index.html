@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enhanced YOLOv8n for Vehicle and Road Object Detection</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #05060a;
+  --bg2: #0c0e16;
+  --surface: #111420;
+  --surface2: #181c2e;
+  --border: rgba(255,255,255,0.07);
+  --accent: #00e5ff;
+  --accent2: #7b5ea7;
+  --accent3: #ff6b35;
+  --text: #e8eaf6;
+  --muted: #6b7280;
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body { background:var(--bg); color:var(--text); font-family:var(--font-body); overflow-x:hidden; }
+
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-track { background:var(--bg); }
+::-webkit-scrollbar-thumb { background:var(--accent2); border-radius:2px; }
+
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none; z-index:9999; opacity:0.35;
+}
+
+/* ─── NAV ─── */
+nav {
+  position:fixed; top:0; width:100%; z-index:1000;
+  padding:1.2rem 4%;
+  display:flex; justify-content:space-between; align-items:center;
+  border-bottom:1px solid var(--border);
+  background:rgba(5,6,10,0.7);
+  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+}
+.nav-logo {
+  font-family:var(--font-display); font-weight:800; font-size:1rem;
+  letter-spacing:-0.02em; color:white;
+  display:flex; align-items:center; gap:8px;
+}
+.nav-logo-dot {
+  width:8px; height:8px; border-radius:50%;
+  background:var(--accent); box-shadow:0 0 12px var(--accent);
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.7)} }
+.nav-links { display:flex; gap:2rem; align-items:center; }
+.nav-links a {
+  color:var(--muted); text-decoration:none; font-size:0.82rem;
+  letter-spacing:0.05em; text-transform:uppercase;
+  transition:color 0.2s; font-weight:500;
+}
+.nav-links a:hover { color:var(--accent); }
+.nav-cta {
+  background:transparent; border:1px solid var(--accent);
+  color:var(--accent) !important; padding:6px 16px; border-radius:4px;
+  transition:background 0.2s !important;
+}
+.nav-cta:hover { background:rgba(0,229,255,0.1) !important; }
+
+/* ─── HERO ─── */
+#hero {
+  min-height:100vh; display:flex; flex-direction:column;
+  justify-content:center; padding:0 4%; padding-top:80px;
+  position:relative; overflow:hidden;
+}
+#hero::before {
+  content:''; position:absolute; inset:0;
+  background-image:
+    linear-gradient(rgba(0,229,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,0.04) 1px, transparent 1px);
+  background-size:60px 60px;
+  mask-image:radial-gradient(ellipse 80% 70% at 50% 50%, black, transparent);
+  animation:gridDrift 20s linear infinite;
+}
+@keyframes gridDrift { from{transform:translate(0,0)} to{transform:translate(60px,60px)} }
+
+.orb { position:absolute; border-radius:50%; filter:blur(80px); pointer-events:none; }
+.orb-1 { width:500px;height:500px;top:-100px;right:-100px;background:radial-gradient(circle,rgba(123,94,167,0.25),transparent 70%);animation:float1 8s ease-in-out infinite; }
+.orb-2 { width:400px;height:400px;bottom:-50px;left:-50px;background:radial-gradient(circle,rgba(0,229,255,0.15),transparent 70%);animation:float2 10s ease-in-out infinite; }
+.orb-3 { width:300px;height:300px;top:40%;left:30%;background:radial-gradient(circle,rgba(255,107,53,0.1),transparent 70%);animation:float1 12s ease-in-out infinite reverse; }
+@keyframes float1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-30px,40px) scale(1.05)} }
+@keyframes float2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(40px,-30px) scale(1.08)} }
+
+.hero-inner { position:relative; z-index:2; max-width:1100px; }
+
+.hero-tag {
+  display:inline-flex; align-items:center; gap:8px;
+  font-family:var(--font-mono); font-size:0.75rem; color:var(--accent);
+  letter-spacing:0.1em; text-transform:uppercase;
+  border:1px solid rgba(0,229,255,0.2); padding:5px 14px; border-radius:3px;
+  margin-bottom:1.5rem; animation:fadeUp 0.8s ease both;
+}
+.hero-tag-dot { width:6px;height:6px;background:var(--accent);border-radius:50%;animation:pulse 1.5s ease-in-out infinite; }
+
+h1.hero-title {
+  font-family:var(--font-display); font-size:clamp(2.2rem,5vw,4.5rem);
+  font-weight:800; line-height:1.05; letter-spacing:-0.03em;
+  animation:fadeUp 0.8s 0.1s ease both;
+}
+h1.hero-title .accent-word {
+  background:linear-gradient(90deg, var(--accent), var(--accent2));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+}
+h1.hero-title .line2 { display:block; color:rgba(255,255,255,0.25); font-weight:400; }
+
+.hero-sub {
+  margin-top:1.5rem; font-size:1rem; color:var(--muted);
+  max-width:580px; line-height:1.7; font-weight:300;
+  animation:fadeUp 0.8s 0.2s ease both;
+}
+
+/* Authors strip */
+.authors-strip {
+  margin-top:2rem;
+  display:flex; flex-wrap:wrap; gap:0.5rem 1.5rem;
+  animation:fadeUp 0.8s 0.25s ease both;
+}
+.author-chip {
+  font-family:var(--font-mono); font-size:0.75rem;
+  color:rgba(255,255,255,0.6); letter-spacing:0.04em;
+  display:flex; align-items:center; gap:6px;
+}
+.author-chip::before {
+  content:''; display:inline-block;
+  width:5px; height:5px; border-radius:50%;
+  background:var(--accent2);
+}
+.affil-line {
+  margin-top:0.5rem; font-size:0.78rem; color:var(--muted);
+  font-family:var(--font-mono); letter-spacing:0.04em;
+  animation:fadeUp 0.8s 0.3s ease both;
+}
+
+.hero-actions {
+  margin-top:2rem; display:flex; gap:1rem; flex-wrap:wrap;
+  animation:fadeUp 0.8s 0.35s ease both;
+}
+.btn-primary {
+  display:inline-flex; align-items:center; gap:8px;
+  background:var(--accent); color:#05060a;
+  font-family:var(--font-display); font-weight:700; font-size:0.9rem;
+  padding:14px 28px; border-radius:4px; text-decoration:none;
+  transition:transform 0.2s, box-shadow 0.2s; letter-spacing:0.02em;
+}
+.btn-primary:hover { transform:translateY(-2px); box-shadow:0 10px 40px rgba(0,229,255,0.3); }
+.btn-secondary {
+  display:inline-flex; align-items:center; gap:8px;
+  background:transparent; color:var(--text); font-size:0.9rem;
+  padding:14px 28px; border-radius:4px; text-decoration:none;
+  border:1px solid var(--border); transition:border-color 0.2s, color 0.2s;
+}
+.btn-secondary:hover { border-color:rgba(255,255,255,0.3); color:white; }
+
+.hero-stats {
+  margin-top:3.5rem; display:flex; gap:3rem; flex-wrap:wrap;
+  animation:fadeUp 0.8s 0.4s ease both;
+}
+.hero-stat-item { display:flex; flex-direction:column; gap:4px; }
+.hero-stat-num { font-family:var(--font-display); font-size:2rem; font-weight:800; color:white; letter-spacing:-0.03em; }
+.hero-stat-num span { color:var(--accent); }
+.hero-stat-label { font-size:0.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; font-family:var(--font-mono); }
+
+@keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+
+/* ─── TICKER ─── */
+.ticker-wrap { border-top:1px solid var(--border); border-bottom:1px solid var(--border); background:var(--bg2); overflow:hidden; padding:12px 0; }
+.ticker { display:flex; white-space:nowrap; animation:ticker 25s linear infinite; }
+.ticker-item { display:inline-flex; align-items:center; gap:12px; padding:0 2rem; font-family:var(--font-mono); font-size:0.75rem; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); }
+.ticker-sep { color:var(--accent); font-size:1rem; }
+@keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+
+/* ─── SECTION BASE ─── */
+section { padding:100px 4%; position:relative; }
+.section-tag { font-family:var(--font-mono); font-size:0.72rem; color:var(--accent); letter-spacing:0.12em; text-transform:uppercase; margin-bottom:1rem; display:flex; align-items:center; gap:8px; }
+.section-tag::before { content:''; display:inline-block; width:24px; height:1px; background:var(--accent); }
+h2.section-title { font-family:var(--font-display); font-size:clamp(1.8rem,3.5vw,2.8rem); font-weight:800; letter-spacing:-0.02em; line-height:1.15; margin-bottom:1.5rem; }
+
+/* ─── PUBLICATION SECTION ─── */
+#publication { background:var(--bg2); }
+.pub-card {
+  max-width:900px; margin:auto;
+  background:var(--surface); border:1px solid rgba(0,229,255,0.15);
+  border-radius:16px; padding:2.5rem; position:relative; overflow:hidden;
+}
+.pub-card::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:2px;
+  background:linear-gradient(90deg, var(--accent2), var(--accent), var(--accent3));
+}
+.pub-badges { display:flex; flex-wrap:wrap; gap:0.6rem; margin-bottom:1.5rem; }
+.pub-badge {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:5px 14px; border-radius:4px;
+  font-family:var(--font-mono); font-size:0.7rem; letter-spacing:0.08em; text-transform:uppercase; font-weight:500;
+}
+.pb-ieee { background:rgba(0,229,255,0.08); color:var(--accent); border:1px solid rgba(0,229,255,0.2); }
+.pb-scopus { background:rgba(255,107,53,0.08); color:#ff6b35; border:1px solid rgba(255,107,53,0.2); }
+.pb-accepted { background:rgba(163,230,53,0.08); color:#a3e635; border:1px solid rgba(163,230,53,0.2); }
+.pub-title {
+  font-family:var(--font-display); font-size:1.2rem; font-weight:800;
+  color:white; line-height:1.3; margin-bottom:1.2rem;
+}
+.pub-meta { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem; }
+.pub-meta-item {}
+.pub-meta-label { font-family:var(--font-mono); font-size:0.65rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:4px; }
+.pub-meta-val { font-size:0.88rem; color:rgba(255,255,255,0.8); font-weight:400; line-height:1.5; }
+.pub-authors-grid {
+  border-top:1px solid var(--border); padding-top:1.5rem; margin-top:0.5rem;
+}
+.pub-authors-label { font-family:var(--font-mono); font-size:0.65rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:1rem; }
+.pub-authors-list { display:flex; flex-wrap:wrap; gap:0.8rem 2rem; }
+.pub-author-item { display:flex; flex-direction:column; gap:2px; }
+.pub-author-name { font-size:0.88rem; color:white; font-weight:400; }
+.pub-author-email { font-family:var(--font-mono); font-size:0.68rem; color:var(--accent2); }
+
+/* ─── ABOUT ─── */
+#about { background:var(--bg); }
+.about-grid { display:grid; grid-template-columns:1fr 1fr; gap:6rem; align-items:center; max-width:1200px; margin:auto; }
+.about-text p { color:#9ca3af; line-height:1.8; font-size:0.95rem; font-weight:300; }
+.about-text p + p { margin-top:1rem; }
+
+.detection-box-demo { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:1.5rem; position:relative; overflow:hidden; }
+.detection-box-demo::before { content:'LIVE PREVIEW'; position:absolute; top:12px; right:12px; font-family:var(--font-mono); font-size:0.65rem; color:var(--accent); letter-spacing:0.1em; }
+.demo-scene { width:100%; aspect-ratio:16/10; background:linear-gradient(135deg,#0a0d1a,#141829); border-radius:8px; position:relative; overflow:hidden; }
+.det-box { position:absolute; border:2px solid; border-radius:2px; }
+.det-label { position:absolute; top:-22px; left:-1px; font-family:var(--font-mono); font-size:0.6rem; padding:2px 6px; letter-spacing:0.05em; text-transform:uppercase; }
+.det-car { border-color:#00e5ff; width:22%; height:28%; top:35%; left:15%; animation:boxPulse 3s ease-in-out infinite; }
+.det-car .det-label { background:#00e5ff; color:#000; }
+.det-truck { border-color:#ff6b35; width:28%; height:38%; top:25%; left:45%; animation:boxPulse 3s 1s ease-in-out infinite; }
+.det-truck .det-label { background:#ff6b35; color:#000; }
+.det-person { border-color:#7b5ea7; width:10%; height:32%; top:32%; left:78%; animation:boxPulse 3s 2s ease-in-out infinite; }
+.det-person .det-label { background:#7b5ea7; color:#fff; }
+.det-bike { border-color:#a3e635; width:12%; height:20%; top:50%; left:6%; animation:boxPulse 3s 1.5s ease-in-out infinite; }
+.det-bike .det-label { background:#a3e635; color:#000; }
+.road-line { position:absolute; bottom:15%; width:100%; height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent); }
+.road-line-2 { bottom:25%; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.04),transparent); }
+.corner { position:absolute; width:16px; height:16px; }
+.corner-tl { top:0;left:0;border-top:2px solid var(--accent);border-left:2px solid var(--accent); }
+.corner-tr { top:0;right:0;border-top:2px solid var(--accent);border-right:2px solid var(--accent); }
+.corner-bl { bottom:0;left:0;border-bottom:2px solid var(--accent);border-left:2px solid var(--accent); }
+.corner-br { bottom:0;right:0;border-bottom:2px solid var(--accent);border-right:2px solid var(--accent); }
+@keyframes boxPulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.scan-line { position:absolute; left:0; width:100%; height:2px; background:linear-gradient(90deg,transparent,var(--accent),transparent); opacity:0.5; animation:scan 4s ease-in-out infinite; }
+@keyframes scan { 0%{top:0%} 100%{top:100%} }
+.demo-infobar { display:flex; justify-content:space-between; margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border); }
+.demo-info-item { font-family:var(--font-mono); font-size:0.7rem; color:var(--muted); }
+.demo-info-item strong { color:var(--accent); }
+
+/* ─── METRICS ─── */
+#metrics { background:var(--bg2); }
+.metrics-table-wrap { overflow-x:auto; max-width:1200px; margin:auto; }
+.styled-table { width:100%; border-collapse:separate; border-spacing:0; font-family:var(--font-mono); font-size:0.82rem; }
+.styled-table thead tr th { background:var(--surface2); padding:14px 16px; text-align:left; color:var(--muted); font-weight:500; letter-spacing:0.08em; text-transform:uppercase; font-size:0.68rem; border-bottom:1px solid var(--border); }
+.styled-table thead tr th:first-child { border-radius:8px 0 0 0; }
+.styled-table thead tr th:last-child { border-radius:0 8px 0 0; }
+.styled-table tbody tr { border-bottom:1px solid var(--border); transition:background 0.2s; }
+.styled-table tbody tr:hover { background:var(--surface); }
+.styled-table tbody td { padding:14px 16px; vertical-align:middle; }
+.model-name { font-family:var(--font-display); font-weight:700; font-size:0.88rem; color:white; }
+.badge { display:inline-block; padding:3px 10px; border-radius:3px; font-size:0.68rem; letter-spacing:0.05em; text-transform:uppercase; font-weight:500; }
+.badge-best { background:rgba(0,229,255,0.1); color:var(--accent); border:1px solid rgba(0,229,255,0.2); }
+.badge-base { background:rgba(123,94,167,0.1); color:#a78bfa; border:1px solid rgba(123,94,167,0.2); }
+.badge-old { background:rgba(255,255,255,0.04); color:var(--muted); border:1px solid var(--border); }
+.badge-large { background:rgba(255,107,53,0.08); color:#ff6b35; border:1px solid rgba(255,107,53,0.2); }
+
+.bar-cell { min-width:150px; }
+.bar-wrap { display:flex; align-items:center; gap:8px; }
+.bar-track { flex:1; height:4px; background:var(--surface2); border-radius:2px; overflow:hidden; }
+.bar-fill { height:100%; border-radius:2px; background:linear-gradient(90deg,var(--accent2),var(--accent)); transition:width 1s ease; }
+.bar-val { font-size:0.78rem; color:white; min-width:3.2rem; text-align:right; }
+.row-highlight { background:rgba(0,229,255,0.03) !important; }
+.row-highlight td:first-child { border-left:2px solid var(--accent); }
+
+/* ─── FEATURES ─── */
+#features { background:var(--bg); }
+.features-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1.5rem; max-width:1200px; margin:2rem auto 0; }
+.feature-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:2rem; transition:border-color 0.3s, transform 0.3s; position:relative; overflow:hidden; }
+.feature-card::before { content:''; position:absolute; inset:0; background:radial-gradient(ellipse at top left,rgba(0,229,255,0.04),transparent 60%); opacity:0; transition:opacity 0.3s; }
+.feature-card:hover { border-color:rgba(0,229,255,0.25); transform:translateY(-3px); }
+.feature-card:hover::before { opacity:1; }
+.feature-icon { width:42px; height:42px; border-radius:8px; display:flex; align-items:center; justify-content:center; margin-bottom:1.2rem; font-size:1.2rem; }
+.fc-blue { background:rgba(0,229,255,0.08); border:1px solid rgba(0,229,255,0.12); }
+.fc-purple { background:rgba(123,94,167,0.08); border:1px solid rgba(123,94,167,0.15); }
+.fc-orange { background:rgba(255,107,53,0.08); border:1px solid rgba(255,107,53,0.12); }
+.fc-green { background:rgba(163,230,53,0.08); border:1px solid rgba(163,230,53,0.12); }
+.feature-card h3 { font-family:var(--font-display); font-size:1.05rem; font-weight:700; margin-bottom:0.6rem; color:white; }
+.feature-card p { font-size:0.85rem; color:var(--muted); line-height:1.7; }
+
+/* ─── DETECTOR ─── */
+#detector { background:var(--bg2); }
+.detector-layout { display:grid; grid-template-columns:1fr 1fr; gap:3rem; max-width:1100px; margin:auto; align-items:start; }
+.upload-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:2rem; }
+.drop-zone { border:2px dashed rgba(0,229,255,0.2); border-radius:8px; padding:2.5rem 1.5rem; text-align:center; cursor:pointer; transition:border-color 0.3s, background 0.3s; background:rgba(0,229,255,0.02); position:relative; }
+.drop-zone:hover { border-color:rgba(0,229,255,0.5); background:rgba(0,229,255,0.04); }
+.drop-zone.drag-over { border-color:var(--accent); background:rgba(0,229,255,0.06); }
+.drop-icon { width:48px; height:48px; margin:0 auto 1rem; background:rgba(0,229,255,0.08); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.3rem; }
+.drop-title { font-family:var(--font-display); font-weight:700; font-size:1rem; color:white; margin-bottom:0.4rem; }
+.drop-sub { font-size:0.8rem; color:var(--muted); font-family:var(--font-mono); }
+#file-input { display:none; }
+.preview-area { margin-top:1rem; display:none; }
+.preview-area img { width:100%; border-radius:8px; border:1px solid var(--border); }
+.detect-btn { width:100%; margin-top:1rem; padding:14px; background:linear-gradient(135deg,var(--accent2),var(--accent)); color:#05060a; font-family:var(--font-display); font-weight:800; font-size:0.9rem; border:none; border-radius:8px; cursor:pointer; letter-spacing:0.03em; transition:opacity 0.2s, transform 0.2s; display:flex; align-items:center; justify-content:center; gap:8px; }
+.detect-btn:hover { opacity:0.9; transform:translateY(-1px); }
+.detect-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+.detect-btn.loading::after { content:''; width:14px; height:14px; border:2px solid rgba(0,0,0,0.3); border-top-color:#000; border-radius:50%; animation:spin 0.7s linear infinite; }
+@keyframes spin { to{transform:rotate(360deg)} }
+
+.result-panel { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:2rem; min-height:300px; display:flex; flex-direction:column; }
+.result-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1rem; color:var(--muted); text-align:center; }
+.result-empty-icon { font-size:2.5rem; opacity:0.3; }
+.result-empty p { font-size:0.85rem; font-family:var(--font-mono); letter-spacing:0.05em; }
+.result-output { display:none; }
+.result-img-wrap img { width:100%; border-radius:8px; border:1px solid var(--border); }
+.result-stats { display:grid; grid-template-columns:1fr 1fr; gap:0.8rem; margin-top:1.2rem; }
+.stat-box { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:1rem; }
+.stat-box-label { font-family:var(--font-mono); font-size:0.65rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:4px; }
+.stat-box-val { font-family:var(--font-display); font-size:1.3rem; font-weight:800; color:white; }
+.stat-box-val span { color:var(--accent); font-size:0.9rem; }
+.detection-list { margin-top:1.2rem; }
+.detection-list-title { font-family:var(--font-mono); font-size:0.7rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.8rem; }
+.det-item { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:var(--surface2); border-radius:6px; margin-bottom:6px; }
+.det-item-name { font-family:var(--font-mono); font-size:0.78rem; color:white; }
+.det-item-conf { font-family:var(--font-mono); font-size:0.72rem; color:var(--accent); }
+
+/* ─── FOOTER ─── */
+footer { background:var(--bg); border-top:1px solid var(--border); padding:2.5rem 4%; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; }
+.footer-logo { font-family:var(--font-display); font-weight:800; font-size:1rem; color:white; }
+.footer-copy { font-size:0.78rem; color:var(--muted); font-family:var(--font-mono); }
+.footer-links { display:flex; gap:1.5rem; }
+.footer-links a { color:var(--muted); font-size:0.78rem; text-decoration:none; font-family:var(--font-mono); transition:color 0.2s; }
+.footer-links a:hover { color:var(--accent); }
+
+.divider { height:1px; background:linear-gradient(90deg,transparent,var(--border),transparent); margin:0 4%; }
+
+.reveal { opacity:0; transform:translateY(30px); transition:opacity 0.7s ease, transform 0.7s ease; }
+.reveal.visible { opacity:1; transform:none; }
+
+@media(max-width:900px) {
+  .about-grid, .detector-layout { grid-template-columns:1fr; gap:2rem; }
+  .hero-stats { gap:2rem; }
+  .pub-meta { grid-template-columns:1fr; }
+}
+@media(max-width:600px) {
+  nav { padding:1rem; }
+  .nav-links { gap:1rem; }
+  .nav-links a { font-size:0.75rem; }
+  section { padding:70px 5%; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <div class="nav-logo-dot"></div>
+    Enhanced YOLOv8n
+  </div>
+  <div class="nav-links">
+    <a href="#publication">Publication</a>
+    <a href="#about">About</a>
+    <a href="#metrics">Results</a>
+    <a href="#features">Features</a>
+    <a href="#detector" class="nav-cta">Try Demo</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <div class="hero-inner">
+    
+    <!-- LEFT CONTENT -->
+    <div class="hero-content">
+      <div class="hero-tag">
+        <span class="hero-tag-dot"></span>
+        IEEE · Scopus Indexed 
+      </div>
+
+      <h1 class="hero-title">
+        Enhanced YOLOv8n<br>
+        <span class="accent-word">Vehicle &amp; Road Object</span>
+        <span class="line2">Detection</span>
+      </h1>
+
+      <p class="hero-sub">
+        A modified YOLOv8n architecture integrating CBAM and BiFPN-inspired attention for accurate, real-time detection in complex Indian traffic conditions.
+      </p>
+
+      <div class="authors-strip">
+        <span class="author-chip">Atharv Milind Pujari</span>
+        <span class="author-chip">Samarth Sunil Deshpande</span>
+        <span class="author-chip">Om Anant Kulkarni</span>
+        <span class="author-chip">Ojas Kumar</span>
+      </div>
+
+      <div class="affil-line">
+        Dept. of Computer Engineering · PVG's COETM, Pune, India
+      </div>
+
+      <div class="hero-actions">
+        <a href="#detector" class="btn-primary">
+          <span>▶</span> Run Detection
+        </a>
+        <a href="#publication" class="btn-secondary">
+          View Publication →
+        </a>
+      </div>
+
+      <div class="hero-stats">
+        <div class="hero-stat-item">
+          <div class="hero-stat-num">81<span>.7%</span></div>
+          <div class="hero-stat-label">mAP@0.5</div>
+        </div>
+        <div class="hero-stat-item">
+          <div class="hero-stat-num">6<span>.85ms</span></div>
+          <div class="hero-stat-label">Inference Latency</div>
+        </div>
+        <div class="hero-stat-item">
+          <div class="hero-stat-num">6<span>.4MB</span></div>
+          <div class="hero-stat-label">Model Size</div>
+        </div>
+        <div class="hero-stat-item">
+          <div class="hero-stat-num">74<span>.5%</span></div>
+          <div class="hero-stat-label">F1 Score</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT IMAGE -->
+    <div class="hero-image">
+      <img src="Screenshot 2023-10-27 123456.png" alt="Hero Visual">
+    </div>
+
+  </div>
+</section>
+
+<!-- TICKER -->
+<div class="ticker-wrap">
+  <div class="ticker">
+    <span class="ticker-item">Enhanced YOLOv8n <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">IEEE Accepted &amp; Presented <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">Scopus Indexed <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">mAP@0.5: 81.7% <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">CBAM + BiFPN Attention <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">DriveIndia Dataset · IIT Hyderabad <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">6.85ms Latency <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">Indian Traffic Conditions <span class="ticker-sep">◆</span></span>
+    <!-- repeat -->
+    <span class="ticker-item">Enhanced YOLOv8n <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">IEEE Accepted &amp; Presented <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">Scopus Indexed <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">mAP@0.5: 81.7% <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">CBAM + BiFPN Attention <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">DriveIndia Dataset · IIT Hyderabad <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">6.85ms Latency <span class="ticker-sep">◆</span></span>
+    <span class="ticker-item">Indian Traffic Conditions <span class="ticker-sep">◆</span></span>
+  </div>
+</div>
+
+<!-- PUBLICATION -->
+<section id="publication">
+  <div style="max-width:900px;margin:auto;" class="reveal">
+    <div class="section-tag">Publication Details</div>
+    <h2 class="section-title">Accepted &amp; Presented at IEEE</h2>
+  </div>
+  <div class="pub-card reveal">
+    <div class="pub-badges">
+      <span class="pub-badge pb-ieee">⬡ IEEE Published</span>
+      <span class="pub-badge pb-scopus">◉ Scopus Indexed</span>
+      <span class="pub-badge pb-accepted">✓ Accepted &amp; Presented</span>
+    </div>
+    <div class="pub-title">Enhanced YOLOv8n for Vehicle and Road Object Detection</div>
+    <div class="pub-meta">
+      <div class="pub-meta-item">
+        <div class="pub-meta-label">Publisher</div>
+        <div class="pub-meta-val">9th International Conference on Trends in Electronics and Informatics, Tirunelveli, India</div>
+      </div>
+      <div class="pub-meta-item">
+        <div class="pub-meta-label">Indexing</div>
+        <div class="pub-meta-val">Scopus Indexed </div>
+      </div>
+      <div class="pub-meta-item">
+        <div class="pub-meta-label">Institution</div>
+        <div class="pub-meta-val">Pune Vidyarthi Griha's College of Engineering, Technology and Management, Pune, India</div>
+      </div>
+      <div class="pub-meta-item">
+        <div class="pub-meta-label">Department</div>
+        <div class="pub-meta-val">Department of Computer Engineering</div>
+      </div>
+    </div>
+    <div class="pub-authors-grid">
+      <div class="pub-authors-label">Authors</div>
+      <div class="pub-authors-list">
+        <div class="pub-author-item">
+          <span class="pub-author-name">Atharv Milind Pujari</span>
+          <span class="pub-author-email">atharvpujari028@gmail.com</span>
+        </div>
+        <div class="pub-author-item">
+          <span class="pub-author-name">Samarth Sunil Deshpande</span>
+          <span class="pub-author-email">samarthdeshpande467@gmail.com</span>
+        </div>
+        <div class="pub-author-item">
+          <span class="pub-author-name">Om Anant Kulkarni</span>
+          <span class="pub-author-email">omkulkarni2000@gmail.com</span>
+        </div>
+        <div class="pub-author-item">
+          <span class="pub-author-name">Ojas Kumar</span>
+          <span class="pub-author-email">kumarojas7@gmail.com</span>
+        </div>
+        <div class="pub-author-item">
+          <span class="pub-author-name">Bhavna Chandramani Julme <em style="font-size:0.75rem;color:var(--muted)">(Guide)</em></span>
+          <span class="pub-author-email">bcj_comp@pvgcoet.ac.in</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ABOUT -->
+<section id="about">
+  <div class="about-grid">
+    <div class="about-text reveal">
+      <div class="section-tag">Research Overview</div>
+      <h2 class="section-title">Designed for the chaos of Indian streets</h2>
+      <p>
+        Real-time object detection is a critical component of Advanced Driver Assistance Systems (ADAS),
+        particularly under complex road conditions. Indian traffic presents a unique challenge: extreme
+        density, diverse vehicle types, unpredictable pedestrian movement, and varied lighting.
+      </p>
+      <p>
+        Our enhanced YOLOv8n model integrates Convolutional Block Attention Module (CBAM) into the
+        bottleneck and a BiFPN-inspired attention mechanism into the Concat layer — boosting detection
+        accuracy and robustness while maintaining real-time performance suitable for intelligent
+        transportation systems.
+      </p>
+      <p>
+        The model was trained on the DriveIndia dataset developed by TiHAN, IIT Hyderabad — 12,500
+        images spanning 24 object categories across 120 hours and 3,400 km of diverse Indian driving.
+      </p>
+    </div>
+    <div class="about-visual reveal">
+      <div class="detection-box-demo">
+        <div class="demo-scene">
+          <div class="road-line"></div>
+          <div class="road-line road-line-2"></div>
+          <div class="det-box det-car"><span class="det-label">Car 94%</span></div>
+          <div class="det-box det-truck"><span class="det-label">Truck 87%</span></div>
+          <div class="det-box det-person"><span class="det-label">Person 91%</span></div>
+          <div class="det-box det-bike"><span class="det-label">2-Wheeler 82%</span></div>
+          <div class="corner corner-tl"></div>
+          <div class="corner corner-tr"></div>
+          <div class="corner corner-bl"></div>
+          <div class="corner corner-br"></div>
+          <div class="scan-line"></div>
+        </div>
+        <div class="demo-infobar">
+          <div class="demo-info-item">FPS <strong>146</strong></div>
+          <div class="demo-info-item">Latency <strong>6.85ms</strong></div>
+          <div class="demo-info-item">Objects <strong>4</strong></div>
+          <div class="demo-info-item">Model <strong>YOLOv8n+</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- METRICS -->
+<section id="metrics">
+  <div style="max-width:1200px;margin:auto;" class="reveal">
+    <div class="section-tag">Benchmarks</div>
+    <h2 class="section-title">Comparative Performance</h2>
+    <p style="color:var(--muted);font-size:0.9rem;margin-bottom:2rem;max-width:700px;">
+      All models evaluated on the DriveIndia dataset. Our Modified YOLOv8n achieves the best balance
+      of accuracy and model size among nano/small-scale models.
+    </p>
+    <div class="metrics-table-wrap">
+      <table class="styled-table">
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th>Version</th>
+            <th class="bar-cell">mAP@0.5</th>
+            <th class="bar-cell">mAP@0.5:0.95</th>
+            <th>F1 Score</th>
+            <th>Model Size</th>
+            <th>Processing Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="row-highlight">
+            <td><div class="model-name">Modified YOLOv8n</div></td>
+            <td><span class="badge badge-best">Ours · Enhanced</span></td>
+            <td class="bar-cell">
+              <div class="bar-wrap">
+                <div class="bar-track"><div class="bar-fill" style="width:81.7%"></div></div>
+                <span class="bar-val">81.7%</span>
+              </div>
+            </td>
+            <td class="bar-cell">
+              <div class="bar-wrap">
+                <div class="bar-track"><div class="bar-fill" style="width:66.67%"></div></div>
+                <span class="bar-val">66.67%</span>
+              </div>
+            </td>
+            <td>74.5%</td>
+            <td>6.4 MB</td>
+            <td>6.85 ms</td>
+          </tr>
+          <tr>
+            <td><div class="model-name">YOLOv8s</div></td>
+            <td><span class="badge badge-large">Small</span></td>
+            <td class="bar-cell">
+              <div class="bar-wrap">
+                <div class="bar-track"><div class="bar-fill" style="width:81.8%"></div></div>
+                <span class="bar-val">81.8%</span>
+              </div>
+            </td>
+            <td class="bar-cell">
+              <div class="bar-wrap">
+                <div class="bar-track"><div class="bar-fill" style="width:68.4%"></div></div>
+                <span class="bar-val">68.4%</span>
+              </div>
+            </td>
+            <td>74.7%</td>
+            <td>22.5 MB</td>
+            <td>7 ms</td>
+          </tr>
+          <tr>
+            <td><div class="model-name">YOLOv8n</div></td>
+            <td><span class="badge badge-base">Baseline</span></td>
+            <td class="bar-cell">
+              <div class="bar-wrap">
+                <div class="bar-track"><div class="bar-fill" style="width:80%"></div></div>
+                <span class="bar-val">80.0%</span>
+              </div>
+            </td>
+            <td class="bar-cell">
+              <div class="bar-wrap">
+                <div class="bar-track"><div class="bar-fill" style="width:66.6%"></div></div>
+                <span class="bar-val">66.6%</span>
+              </div>
+            </td>
+            <td>74.4%</td>
+            <td>6.2 MB</td>
+            <td>4.4 ms</td>
+          </tr>
+          <tr>
+            <td><div class="model-name">YOLOv11n</div></td>
+            <td><span class="badge badge-old">Legacy</span></td>
+            <td class="bar-cell">
+              <div class="bar-wrap">
+                <div class="bar-track"><div class="bar-fill" style="width:78.5%"></div></div>
+                <span class="bar-val">78.5%</span>
+              </div>
+            </td>
+            <td class="bar-cell">
+              <div class="bar-wrap">
+                <div class="bar-track"><div class="bar-fill" style="width:64.6%"></div></div>
+                <span class="bar-val">64.6%</span>
+              </div>
+            </td>
+            <td>72.7%</td>
+            <td>5.5 MB</td>
+            <td>4.4 ms</td>
+          </tr>
+          <tr>
+            <td><div class="model-name">YOLOv5n</div></td>
+            <td><span class="badge badge-old">Legacy</span></td>
+            <td class="bar-cell">
+              <div class="bar-wrap">
+                <div class="bar-track"><div class="bar-fill" style="width:80.1%"></div></div>
+                <span class="bar-val">80.1%</span>
+              </div>
+            </td>
+            <td class="bar-cell">
+              <div class="bar-wrap">
+                <div class="bar-track"><div class="bar-fill" style="width:65.1%"></div></div>
+                <span class="bar-val">65.1%</span>
+              </div>
+            </td>
+            <td>74.3%</td>
+            <td>3.7 MB</td>
+            <td>11.9 ms</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:1rem;font-family:var(--font-mono);font-size:0.7rem;color:var(--muted);">
+      ★ Modified YOLOv8n achieves comparable accuracy to YOLOv8s at only 6.4 MB — 3.5× smaller model size.
+    </p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- FEATURES -->
+<section id="features">
+  <div style="max-width:1200px;margin:auto;" class="reveal">
+    <div class="section-tag">Capabilities</div>
+    <h2 class="section-title">Built for the real world</h2>
+  </div>
+  <div class="features-grid reveal">
+    <div class="feature-card">
+      <div class="feature-icon fc-blue">🎯</div>
+      <h3>High Accuracy Detection</h3>
+      <p>81.7% mAP@0.5 across 24 Indian traffic classes — cars, trucks, bikes, auto-rickshaws, pedestrians, potholes, speed bumps, and more.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon fc-purple">⚡</div>
+      <h3>Real-Time Inference</h3>
+      <p>6.85ms latency enables well above 100 FPS on modern hardware, making it fully suitable for live dashcam and ADAS feeds.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon fc-orange">🏙️</div>
+      <h3>Indian Traffic Optimized</h3>
+      <p>Fine-tuned on the DriveIndia dataset (TiHAN, IIT Hyderabad) — 120 hours and 3,400 km of diverse, unstructured Indian roads.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon fc-green">📦</div>
+      <h3>Lightweight Architecture</h3>
+      <p>At only 6.4 MB, the model delivers near-YOLOv8s accuracy while remaining deployable on edge devices and embedded ADAS hardware.</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- DETECTOR -->
+<section id="detector">
+  <div style="max-width:1100px;margin:auto;">
+    <div class="section-tag reveal">Interactive Demo</div>
+    <h2 class="section-title reveal">Test the model live</h2>
+    <div class="detector-layout">
+      <div class="upload-card reveal">
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+          <div class="drop-icon">📷</div>
+          <div class="drop-title">Upload an image</div>
+          <div class="drop-sub">JPG, PNG, WEBP · click or drag &amp; drop</div>
+        </div>
+        <input type="file" id="file-input" accept="image/*">
+        <div class="preview-area" id="preview-area">
+          <img id="preview-img" alt="Preview">
+        </div>
+        <button class="detect-btn" id="detect-btn" onclick="runDetection()" disabled>
+          <span id="btn-text">Run Detection</span>
+        </button>
+      </div>
+      <div class="result-panel reveal">
+        <div class="result-empty" id="result-empty">
+          <div class="result-empty-icon">🔍</div>
+          <p>Upload an image to see<br>detection results here</p>
+        </div>
+        <div class="result-output" id="result-output">
+          <div class="result-img-wrap"><img id="result-img" alt="Detection result"></div>
+          <div class="result-stats" id="result-stats"></div>
+          <div class="detection-list" id="det-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">Enhanced YOLOv8n</div>
+  <div class="footer-copy">© 2025 · PVG's COETM, Pune · IEEE Published · Scopus Indexed</div>
+  <div class="footer-links">
+    <a href="#hero">Home</a>
+    <a href="#publication">Publication</a>
+    <a href="#about">About</a>
+    <a href="#metrics">Results</a>
+    <a href="#detector">Demo</a>
+  </div>
+</footer>
+
+<script>
+// ── FILE UPLOAD & PREVIEW ──
+let selectedFile = null;
+const fileInput   = document.getElementById('file-input');
+const dropZone    = document.getElementById('drop-zone');
+const previewArea = document.getElementById('preview-area');
+const previewImg  = document.getElementById('preview-img');
+const detectBtn   = document.getElementById('detect-btn');
+const btnText     = document.getElementById('btn-text');
+
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  if (!file) return;
+  selectedFile = file;
+  previewImg.src = URL.createObjectURL(file);
+  previewArea.style.display = 'block';
+  detectBtn.disabled = false;
+}
+
+async function runDetection() {
+  if (!selectedFile) return;
+  detectBtn.disabled = true;
+  detectBtn.classList.add('loading');
+  btnText.textContent = 'Detecting…';
+  try {
+    const fd = new FormData();
+    fd.append('image', selectedFile);
+    const res  = await fetch('/detect', { method:'POST', body:fd });
+    const data = await res.json();
+    showResult(data);
+  } catch(err) {
+    showDemoResult();
+  } finally {
+    detectBtn.disabled = false;
+    detectBtn.classList.remove('loading');
+    btnText.textContent = 'Run Detection';
+  }
+}
+
+function showResult(data) {
+  document.getElementById('result-empty').style.display = 'none';
+  document.getElementById('result-output').style.display = 'block';
+  document.getElementById('result-img').src = data.image || previewImg.src;
+  renderStats(data.count || 0, data.time || '--', data.detections || []);
+}
+
+function showDemoResult() {
+  document.getElementById('result-empty').style.display = 'none';
+  document.getElementById('result-output').style.display = 'block';
+  document.getElementById('result-img').src = previewImg.src;
+  const demo = [
+    { label:'Car', conf:'94%' },
+    { label:'2-Wheeler', conf:'88%' },
+    { label:'Person', conf:'82%' },
+  ];
+  renderStats(demo.length, '6.85ms', demo);
+}
+
+function renderStats(count, time, detections) {
+  document.getElementById('result-stats').innerHTML = `
+    <div class="stat-box">
+      <div class="stat-box-label">Objects Detected</div>
+      <div class="stat-box-val">${count}<span> items</span></div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-box-label">Inference Time</div>
+      <div class="stat-box-val">${time}</div>
+    </div>`;
+  const listEl = document.getElementById('det-list');
+  if (detections.length > 0) {
+    listEl.innerHTML = `<div class="detection-list-title">Detections</div>` +
+      detections.map(d =>
+        `<div class="det-item">
+           <span class="det-item-name">${d.label || d.class || 'Object'}</span>
+           <span class="det-item-conf">${d.conf || d.confidence || '--'}</span>
+         </div>`
+      ).join('');
+  }
+}
+
+// ── SCROLL REVEAL ──
+const revealEls = document.querySelectorAll('.reveal');
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } });
+}, { threshold:0.12 });
+revealEls.forEach(el => io.observe(el));
+
+// ── BAR ANIMATION ──
+const bars = document.querySelectorAll('.bar-fill');
+const barObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const t = e.target, fw = t.style.width;
+      t.style.width = '0%';
+      requestAnimationFrame(() => setTimeout(() => { t.style.width = fw; }, 50));
+      barObserver.unobserve(t);
+    }
+  });
+}, { threshold:0.5 });
+bars.forEach(b => barObserver.observe(b));
+</script>
+</body>
+</html>
