@@ -9,7 +9,7 @@ import numpy as np
 app = Flask(__name__)
 
 # ── Load model once at startup ────────────────────────────────────────────────
-MODEL_PATH = r"C:\Users\kumar\Downloads\YOLO-application\best.pt"          # change if your file lives elsewhere
+MODEL_PATH = "best.pt"          # change if your file lives elsewhere
 model = YOLO(MODEL_PATH)
 print(f"Model loaded from '{MODEL_PATH}'")
 
